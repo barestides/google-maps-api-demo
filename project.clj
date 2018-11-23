@@ -6,9 +6,11 @@
   :min-lein-version "2.7.1"
 
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.clojure/clojurescript "1.10.238"]
+                 [org.clojure/clojurescript "1.10.439"]
                  [org.clojure/core.async  "0.4.474"]
 
+                 ;;google maps externs
+                 [cljsjs/google-maps "3.18-1"]
                  [reagent "0.8.1"]]
 
   :plugins [[lein-figwheel "0.5.16"]
@@ -43,8 +45,9 @@
                ;; lein cljsbuild once min
                {:id "min"
                 :source-paths ["src"]
-                :compiler {:output-to "resources/public/js/compiled/google-maps-api-demo.js"
-                           :main google-maps-api-demo.core
+                :compiler {:main google-maps-api-demo.core
+                           :output-to "resources/public/js/compiled/google-maps-api-demo.js"
+                           :infer-externs true
                            :optimizations :advanced
                            :pretty-print false}}]}
 

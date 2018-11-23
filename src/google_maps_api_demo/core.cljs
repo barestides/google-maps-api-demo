@@ -1,9 +1,5 @@
 (ns google-maps-api-demo.core
-  (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [reagent.core :as r]
-            [hickory.core :as h]
-            [clojure.pprint :as pprint]
-            [cljs.core.async :refer [<!]]
             [clojure.string :as string]))
 
 (enable-console-print!)
@@ -11,14 +7,13 @@
 (defonce app-state (r/atom {:origin ""
                             :destination ""}))
 
-
 ;;These contain JS objects that are initialized when the page is loaded
 (def directions-service-atom (atom nil))
 (def directions-display-atom (atom nil))
 
-(defn titleize
-  [str-or-kw]
-  (string/capitalize (name str-or-kw)))
+;;;;;;;;;;;;;
+;;; Utils ;;;
+;;;;;;;;;;;;;
 
 (defn text-box-on-change-fn
   [field]
@@ -31,34 +26,44 @@
                                  .-target
                                  .-value))))
 
-(defn text-box
-  [field]
-  [:div.form-group
-   [:label {:for field} (titleize field)]
-   [:input.form-control {:id field :type "text" :value (field @app-state)
-                                 :on-change (text-box-on-change-fn field)}]])
-
 (defn extract-instructions
-  [response]
-  (let [steps (-> response
+  [legs]
+  (mapv :instructions (:steps legs)))
+
+(defn titleize
+  [str-or-kw]
+  (string/capitalize (name str-or-kw)))
+
+;;;;;;;;;;;;;
+;;; State ;;;
+;;;;;;;;;;;;;
+
+(defn response-handler
+  "Takes the response and status from the instructions request.
+  On failure, sets the `input-error?` for validation.
+  On success, pulls the instructions and the formatted origin and
+  destination out of the resopnse into the app-state."
+  [resp status]
+  (if (= status "NOT_FOUND")
+    (swap! app-state assoc :input-error? true)
+    (let [directions-display @directions-display-atom
+          legs (-> resp
                   (js->clj :keywordize-keys true)
                   :routes
                   first
                   :legs
-                  first
-                  :steps)]
-    (mapv :instructions steps)))
-
-(defn response-handler
-  [resp status]
-  (if (= status "NOT_FOUND")
-    (swap! app-state assoc :input-error? true)
-    (let [instructions (extract-instructions resp)
-          directions-display @directions-display-atom]
+                  first)
+          {:keys [start_address end_address]} legs
+          instructions (extract-instructions legs)]
       (.setDirections directions-display resp)
-      (swap! app-state assoc :instructions instructions))))
+      (swap! app-state assoc :instructions instructions
+             ;;The strings provided by the `start_address` and `end_address`
+             ;;from the response are nicely capitalized and formatted.
+             ;;We use this to show what directions are currently being displayed
+             ;;in the map / directions table.
+             :current-origin start_address :current-destination end_address))))
 
-(defn make-directions-req
+(defn make-directions-req!
   []
   (let [{:keys [origin destination]} @app-state
         directions-service @directions-service-atom]
@@ -67,20 +72,7 @@
                                          :travelMode "DRIVING"})
             response-handler)))
 
-(defn location-form
-  []
-  [:form.col-sm-6 {:on-submit (fn [event]
-                                ;;so the page doesn't refresh when the user submits
-                                (do
-                                  (.preventDefault event)
-                                  (make-directions-req)))}
-   [text-box :origin]
-   [text-box :destination]
-   [:div.row (when (:input-error? @app-state)
-       [:div.alert.alert-danger "Route not found! Check your input!"])]
-   [:div.row [:input.btn.btn-primary {:type :submit :value "Submit"}]]])
-
-(defn init-map
+(defn init-map!
   []
   (let [directions-service (google.maps.DirectionsService.)
         directions-display (google.maps.DirectionsRenderer.)
@@ -91,11 +83,43 @@
     (reset! directions-service-atom directions-service)
     (reset! directions-display-atom directions-display)))
 
+;;;;;;;;;;;;;
+;;; Views ;;;
+;;;;;;;;;;;;;
+
+(defn text-box
+  [field]
+  [:div.form-group
+   [:label {:for field} (titleize field)]
+   [:input.form-control {:id field :type "text" :value (field @app-state)
+                         :on-change (text-box-on-change-fn field)}]])
+
+(defn location-form
+  []
+  [:form.col-sm-6 {:on-submit (fn [event]
+                                (do
+                                  ;;so the page doesn't refresh when the user submits
+                                  (.preventDefault event)
+                                  (make-directions-req!)))}
+   [text-box :origin]
+   [text-box :destination]
+   [:div.col-sm-12
+    [:div.row (when (:input-error? @app-state)
+                [:div.alert.alert-danger "Route not found! Check your input!"])]
+    [:div.row [:input.btn.btn-primary {:type :submit :value "Submit"}]]]])
+
 (defn map-elm
   []
   (r/create-class
    {:reagent-render (fn [] [:div#map])
-    :component-did-mount (fn [this] (init-map))}))
+    ;;The awkward reality of reagent...
+    ;;We need to supply an HTML element that exists on the page to
+    ;;the google.maps.Map constructor, but the #map div won't exist
+    ;;until after this component is rendered.
+    ;;Reagent supplies this concept of classes with lifecycle methods
+    ;;to handle these situations:
+    ;;https://github.com/reagent-project/reagent/blob/master/doc/CreatingReagentComponents.md#form-3-a-class-with-life-cycle-methods
+    :component-did-mount (fn [this] (init-map!))}))
 
 (defn directions-table
   []
@@ -111,20 +135,20 @@
 
 (defn page
   []
-  [:div.container
+  [:div#page.container
    [:h2 "Google Maps API CLJS Example App"]
    [:div.row [location-form]]
-   [:div.row
+   [:div#directions-output.row
     [:div.col-sm-6
      [:h4 "Map"]
      [map-elm]]
     (when (:instructions @app-state)
       [:div.col-sm-6
-       [:h4 "Direction Steps"]
+       (let [{:keys [current-origin current-destination]} @app-state]
+         [:h4 (str "Directions from " current-origin " to " current-destination)])
        [directions-table]])]])
 
 (defn on-js-reload []
-  ;; optionally touch your app-app-state to force rerendering depending on
-  ;; your application
-  ;; (swap! app-app-state update-in [:__figwheel_counter] inc)
   (r/render [page] (.getElementById js/document "app")))
+
+(on-js-reload)

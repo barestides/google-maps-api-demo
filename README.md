@@ -4,6 +4,20 @@ Some CLJS experimentation making use of the Google Maps API
 
 ## Setup
 
+First, add your Google Maps API key in `resources/public/index.html` at line 13
+where it says `API-KEY-HERE`.
+
+### Production
+
+To create a production build run:
+
+    lein do clean, cljsbuild once min
+
+And open your browser in `resources/public/index.html`. You will not
+get live reloading, nor a REPL.
+
+### Development
+
 To get an interactive development environment run:
 
     lein figwheel
@@ -20,13 +34,6 @@ and you should see an alert in the browser window.
 To clean all compiled files:
 
     lein clean
-
-To create a production build run:
-
-    lein do clean, cljsbuild once min
-
-And open your browser in `resources/public/index.html`. You will not
-get live reloading, nor a REPL.
 
 ## License
 

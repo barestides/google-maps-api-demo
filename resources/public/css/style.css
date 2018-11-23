@@ -1,3 +1,11 @@
 #map {
     height: 400px;
 }
+
+#page {
+    margin-top: 30px;
+}
+
+#directions-output {
+    margin-top: 40px;
+}
